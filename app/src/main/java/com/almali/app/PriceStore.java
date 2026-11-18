@@ -10,6 +10,16 @@ import java.util.List;
 
 /** Fiyat beta verileri ayrı DB'de: mevcut Almalı alışverişleri asla silinmez. */
 public final class PriceStore extends SQLiteOpenHelper {
+    /** A single offer in a user-supplied external feed; not independently verified. */
+    public static final class Offer {
+        public String merchant = "";
+        public String url = "";
+        public double price;
+        public double shipping;
+        public double total;
+        public long observedAt;
+    }
+
     public static final String OLD_SPICE_URL = "https://www.trendyol.com/old-spice/captain-erkek-dus-jeli-ve-sampuan-3-u-1-arada-vucut-sac-yuz-1000-ml-ekstra-xl-p-797577544";
     public static final String OLD_SPICE_CODE = "797577544";
 
@@ -44,14 +54,55 @@ public final class PriceStore extends SQLiteOpenHelper {
         }
     }
 
-    public PriceStore(Context c) { super(c, "almali_prices.db", null, 1); }
+    public PriceStore(Context c) { super(c, "almali_prices.db", null, 2); }
 
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE tracked (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, product_code TEXT NOT NULL DEFAULT '', product_url TEXT NOT NULL DEFAULT '', image_url TEXT NOT NULL DEFAULT '', feed_url TEXT NOT NULL DEFAULT '', target_price REAL NOT NULL DEFAULT 0, last_check_at INTEGER NOT NULL DEFAULT 0, last_check_result TEXT NOT NULL DEFAULT '', alerted_price REAL NOT NULL DEFAULT 0)");
         db.execSQL("CREATE TABLE observations (id INTEGER PRIMARY KEY AUTOINCREMENT, tracked_id INTEGER NOT NULL, price REAL NOT NULL, merchant TEXT NOT NULL, origin TEXT NOT NULL, observed_at INTEGER NOT NULL, snapshot_id TEXT UNIQUE)");
         db.execSQL("CREATE INDEX observations_by_item ON observations(tracked_id, observed_at DESC)");
+        createOfferTable(db);
     }
-    @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) { }
+    private static void createOfferTable(SQLiteDatabase db) {
+        db.execSQL("CREATE TABLE IF NOT EXISTS current_offers (tracked_id INTEGER NOT NULL, merchant TEXT NOT NULL, price REAL NOT NULL, shipping REAL NOT NULL, total REAL NOT NULL, page_url TEXT NOT NULL, observed_at INTEGER NOT NULL)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS current_offers_by_item ON current_offers(tracked_id, total)");
+    }
+    @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if (oldVersion < 2) createOfferTable(db);  // keep all existing observations
+    }
+
+    public void replaceOffers(long trackedId, List<Offer> rows) {
+        SQLiteDatabase db = getWritableDatabase();
+        db.beginTransaction();
+        try {
+            db.delete("current_offers", "tracked_id=?", new String[]{String.valueOf(trackedId)});
+            for (Offer o : rows) {
+                ContentValues v = new ContentValues();
+                v.put("tracked_id", trackedId); v.put("merchant", o.merchant);
+                v.put("price", o.price); v.put("shipping", o.shipping); v.put("total", o.total);
+                v.put("page_url", o.url); v.put("observed_at", o.observedAt);
+                db.insertOrThrow("current_offers", null, v);
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+    }
+
+    public List<Offer> offers(long trackedId) {
+        List<Offer> offers = new ArrayList<>();
+        try (Cursor c = getReadableDatabase().query("current_offers", null, "tracked_id=?",
+              new String[]{String.valueOf(trackedId)}, null, null, "total ASC")) {
+            while (c.moveToNext()) {
+                Offer row = new Offer();
+                row.merchant = c.getString(c.getColumnIndexOrThrow("merchant"));
+                row.price = c.getDouble(c.getColumnIndexOrThrow("price"));
+                row.shipping = c.getDouble(c.getColumnIndexOrThrow("shipping"));
+                row.total = c.getDouble(c.getColumnIndexOrThrow("total"));
+                row.url = c.getString(c.getColumnIndexOrThrow("page_url"));
+                row.observedAt = c.getLong(c.getColumnIndexOrThrow("observed_at"));
+                offers.add(row);
+            }
+        }
+        return offers;
+    }
 
     public void seedFirstItem(Context context) {
         if (context.getSharedPreferences("almali_price_beta", Context.MODE_PRIVATE).getBoolean("seeded_old_spice", false)) return;
@@ -105,7 +156,13 @@ public final class PriceStore extends SQLiteOpenHelper {
         v.put("last_check_result", t.lastCheckResult);
         v.put("alerted_price", t.alertedPrice);
         if (t.id == 0) t.id = getWritableDatabase().insertOrThrow("tracked", null, v);
-        else getWritableDatabase().update("tracked", v, "id=?", new String[]{String.valueOf(t.id)});
+        else {
+            Tracked previous = get(t.id);
+            getWritableDatabase().update("tracked", v, "id=?", new String[]{String.valueOf(t.id)});
+            // Price offers belong to a particular source. Never show old data under a new URL.
+            if (previous != null && !previous.feedUrl.equals(t.feedUrl))
+                getWritableDatabase().delete("current_offers", "tracked_id=?", new String[]{String.valueOf(t.id)});
+        }
         return t.id;
     }
 
@@ -114,6 +171,7 @@ public final class PriceStore extends SQLiteOpenHelper {
         db.beginTransaction();
         try {
             db.delete("observations", "tracked_id=?", new String[]{String.valueOf(id)});
+            db.delete("current_offers", "tracked_id=?", new String[]{String.valueOf(id)});
             db.delete("tracked", "id=?", new String[]{String.valueOf(id)});
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
@@ -151,7 +209,7 @@ public final class PriceStore extends SQLiteOpenHelper {
      */
     public RecordResult record(long id, double price, String merchant, String origin, String snapshotId) {
         if (!Double.isFinite(price) || price <= 0 || price > 1_000_000_000d) throw new IllegalArgumentException("Geçersiz fiyat");
-        if (!"MANUAL".equals(origin) && !"DEMO_FEED".equals(origin)) throw new IllegalArgumentException("Kaynak tipi geçersiz");
+        if (!"MANUAL".equals(origin) && !"DEMO_FEED".equals(origin) && !"EXTERNAL_FEED".equals(origin)) throw new IllegalArgumentException("Kaynak tipi geçersiz");
         if (merchant == null || merchant.trim().isEmpty()) throw new IllegalArgumentException("Mağaza adı boş");
         SQLiteDatabase db = getWritableDatabase();
         db.beginTransaction();

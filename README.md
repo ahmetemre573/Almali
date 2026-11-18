@@ -1,40 +1,37 @@
-# Almalı 2.0 Beta — Fiyat Takip ilk sürüm
+# Almalı 2.1 Beta — Haricî fiyat akışı & satıcı karşılaştırma altyapısı
 
-**Platform:** Android 8+ (minSdk 26), Java, Android Gradle Plugin 8.9.2, WorkManager 2.10.5, SQLite. **Hedef bütçe:** 0 TL.
+Bu sürüm, **Almalı 2.0 Beta** üzerine geliştirilmiş Android kaynak kodudur. Yeni `applicationId=com.almali.app.beta21` kullanır, böylece farklı debug imzası nedeniyle mevcut Almalı Beta 2.0 uygulamasını silmen gerekmez. 2.1 ayrı uygulamadır; mevcut 2.0'ın kayıtlarını otomatik olarak aktarmaz.
 
-## Bu sürümde neler var?
+## Eklenenler
 
-- Eski Almalı hatırlatma kodlarının yanında yeni `Fiyat Takip (Beta)` bölümü.
-- İlk kullanımda **Old Spice Captain 3'ü 1 Arada 1000 ml** ürününü oluşturma; hedefi 300 TL, **başlangıç fiyatı boş**.
-- Başka ürün ekleme, HTTPS mağaza bağlantısını açma, kullanıcı tarafından verilen fotoğraf URL'sini gösterme.
-- Elle fiyat + mağaza kaydetme, son 100 gözlemin fiyat grafiği ve tarihçesi.
-- Hedefe erişildiğinde **yalnızca kayıt kaynağını belirten** Android fiyat bildirimi.
-- Haricî HTTPS JSON DEMO akışını elle veya WorkManager ile yaklaşık saatte bir kontrol etme. Aynı `snapshot_id` ile tekrar kayıt ve alarm üretmeme.
-- Ürün kodu / para birimi doğrulaması, bağlantı zaman aşımı, maksimum 32 KB JSON sınırı.
+- Önceki fiyat kayıtları, grafik, hedef fiyat uyarısı, **DEMO** akışı aynen bulunur.
+- Kullanıcının girdiği **haricî HTTPS JSON fiyat akışını** (`scope=external`) okur.
+- Bir ürüne ait en fazla 25 satıcı teklifini değerlendirir; stokta olan teklifleri fiyat+kargo toplamına göre sıralar.
+- Teklifleri mağaza bağlantısıyla gösterir; **veri kaynağının doğrulanmadığını** açıkça belirtir.
+- Yanlış ürün kodu, geçersiz fiyat, HTTP bağlantısı, eski gözlem (48+ saat), farklı para birimi ve aynı snapshot kontrolü eklenmiştir.
+- `external` kaynaklar da hedef altı fiyat bildirimi üretebilir; bildirimde haricî verinin doğrulanmadığı belirtilir.
+- SQLite veritabanında `current_offers` eklenmiştir. Version-1'dan version-2'ye geçişin SQL'i mevcut fiyat gözlemlerini silmez.
 
-## Önemli: eski uygulama niçin ayrı?
+## Bu sürümün henüz yapmadığı şey
 
-İlk APK GitHub Actions'ın geçici **debug anahtarı** ile imzalandı. Yeni Actions çalıştırması farklı imza kullanabilir; bu durumda eski uygulamanın üzerine yükleme başarısız olabilir. Eski alışveriş verilerini kaybettirmemek için bu sürümün `applicationId` değeri **`com.almali.app.beta`**, uygulama etiketi **`Almalı Beta`** olarak ayarlandı.
+**Gerçek Trendyol fiyatını kendi başına çekmiyor.** Ücretsiz ve otomatik erişimine izin veren bir fiyat API'si bulmadan bu özellik etkin değil. Dış kaynak beyanları mağazadan doğrulanmış sayılmaz. Ürün adı, fotoğrafı ve geçmiş fiyatlar otomatik oluşturulmaz. Önceki demo sorgusu çalışmayı sürdürür.
 
-- Telefonda hem eski **Almalı** hem yeni **Almalı Beta** yan yana durur.
-- Eski uygulama ve eski hatırlatma kayıtları korunur; **yeni beta içindeki hatırlatma listesi sıfırdan başlar**. Beta ayrı uygulamanın verilerini otomatik olarak içe aktarmaz.
-- İleride tek uygulamada birleşmek için veri dışa/içe aktarma ile kalıcı ve özel bir üretim imzalama anahtarı gereklidir.
+## Test / GitHub
 
-## Kurulum
+1. ZIP'i aç; `Almali-Android` içindeki `app`, `.github`, `docs`, `tests`, `tools` ve diğer kök dosyaları GitHub deponun köküne yükle.
+2. GitHub → Actions → **Almalı 2.1 Android APK** işleminde başarılı derlemeye git.
+3. Artifacts → `almali-v21-debug-apk` ZIP'ini indir; `app-debug.apk` dosyasını telefona aktar.
+4. Telefonunda **Almalı 2.1 Beta** adlı ayrı uygulamayı aç.
+5. Test için DEMO JSON adresini (eski testteki gibi) kullanabilirsin.
+6. Bir sağlayıcıdan açıkça izinli canlı JSON akışı aldığında `docs/EXTERNAL-FEED.md` biçimiyle bağla.
 
-1. Projenin kökündeki `app`, `.github`, `build.gradle`, `settings.gradle`, `gradle.properties` vb. tüm dosyaları GitHub deponuzun **köküne** yükleyin; iç içe `Almali-Android` klasörü oluşmamalı.
-2. `Actions → Android APK derlemesi` iş akışının yeşil olmasını bekleyin.
-3. İş akışı sayfasındaki `Artifacts → almali-beta-debug-apk` ZIP'ini indirip ayıklayın.
-4. `app-debug.apk` dosyasını telefonunuza gönderip yükleyin.
-5. Yeni **Almalı Beta** uygulamasını açın → **Fiyat Takip (Beta)**.
+**Önemli:** GitHub Actions başarıyla derlese bile Android telefonda kurulum ve işlev testi gerekir. Paket burada Android SDK olmadığı için APK olarak derlenmedi. Fiyat verisinin gerçekten mağazadan geldiğini veya kaynak lisansının uygunluğunu otomatik olarak kanıtlayamayız.
 
-**Bu ortamda Android SDK ve Gradle bulunmadığından APK burada üretilemedi.** Java alarm kurallarının bağımsız testleri çalıştırılabilir; APK'nın CI'da ve telefonda test edilmesi gerekir.
+## Kaynaklar
 
-## İlk 3 test
-
-1. Eski Almalı uygulamasının telefonda yerinde durduğunu doğrulayın.
-2. `Fiyat Takip` ekranında Old Spice ürününü görüntüleyin, ilk fiyatı `379`, ikinci fiyatı `299,90` olarak **elle** girin. Grafikte iki kayıt ve izin verildiyse manuel fiyat alarmı oluşmalı.
-3. `docs/DEMO-TEST.md` üzerinden test JSON beslemesini bağlayın ve otomatik veri hattını deneyin.
+- Teknik haricî JSON şartnamesi: `docs/EXTERNAL-FEED.md`
+- Python doğrulama: `tools/validate_external_feed.py`
+- Örnek TEST kaynağı: `docs/demo-feed.json`
 
 ## Gerçek otomatik fiyat karşılaştırması neden yok?
 

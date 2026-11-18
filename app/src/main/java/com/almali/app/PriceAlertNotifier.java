@@ -30,8 +30,13 @@ public final class PriceAlertNotifier {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String amount = NumberFormat.getCurrencyInstance(new Locale("tr", "TR")).format(price);
         boolean demo = "DEMO_FEED".equals(origin);
-        String title = demo ? "TEST fiyat alarmı: " + item.name : "Kaydettiğin fiyat hedefte: " + item.name;
-        String text = amount + (demo ? " · Test JSON akışından, gerçek mağaza fiyatı değil" : " · Elle kaydedilen fiyat");
+        boolean external = "EXTERNAL_FEED".equals(origin);
+        String title = demo ? "TEST fiyat alarmı: " + item.name
+            : external ? "Haricî fiyat alarmı: " + item.name
+            : "Kaydettiğin fiyat hedefte: " + item.name;
+        String text = amount + (demo ? " · TEST JSON, gerçek mağaza fiyatı değil"
+            : external ? " · Kullanıcı kaynaklı veri; mağazada doğrula"
+            : " · Elle kaydedilen fiyat");
         Notification notification = new Notification.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)

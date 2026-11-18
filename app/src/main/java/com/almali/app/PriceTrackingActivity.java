@@ -100,7 +100,7 @@ public final class PriceTrackingActivity extends Activity {
         TextView back=button("‹ Geri",false);top.addView(back);back.setOnClickListener(v->{if(selectedId>0){selectedId=0;render();}else finish();});
         LinearLayout caption=vertical();LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,-2,1);cp.leftMargin=dp(13);top.addView(caption,cp);
         caption.addView(text("Fiyat Takip",24,TEXT,true));
-        gap(caption,4);caption.addView(text("Almalı 2.0 · Ücretsiz beta",11,MUTED,false));
+        gap(caption,4);caption.addView(text("Almalı 2.1 · Ücretsiz beta",11,MUTED,false));
         root.addView(top);
         ScrollView scroll=new ScrollView(this);scroll.setClipToPadding(false);scroll.setFillViewport(true);
         LinearLayout content=vertical();pad(content,18,4,18,25);
@@ -119,7 +119,7 @@ public final class PriceTrackingActivity extends Activity {
     private void headline(LinearLayout parent,String message){TextView t=text(message,19,TEXT,true);LinearLayout.LayoutParams p=size(-1,-2);p.topMargin=dp(15);p.bottomMargin=dp(12);parent.addView(t,p);}
 
     private void showAll(LinearLayout list){
-        note(list,"BETA · Bu ekrandaki fiyatlar yalnızca senin kaydettiğin veya DEMO JSON akışından alınan fiyatlardır. Canlı Trendyol/Amazon fiyatı çekilmiyor.");
+        note(list,"BETA · Elle girilen, DEMO veya kullanıcı tarafından eklenen haricî JSON fiyatları gösterilir. Mağaza fiyatları bağımsız olarak doğrulanmaz.");
         gap(list,13);
         TextView add=button("+ Fiyat takibine ürün ekle",true);list.addView(add,size(-1,46));add.setOnClickListener(v->edit(null));
         List<PriceStore.Tracked> all=db.all();
@@ -127,7 +127,7 @@ public final class PriceTrackingActivity extends Activity {
         if(all.isEmpty())note(list,"Henüz ürün yok. Fiyat takibine ürün ekleyerek başlayabilirsin.");
         for(PriceStore.Tracked t:all) itemCard(list,t);
         gap(list,8);
-        note(list,"Otomatik kontrol yalnızca senin eklediğin HTTPS DEMO JSON akışları için çalışır. Android'in pil kısıtlamaları nedeniyle saatlik kontroller gecikebilir.");
+        note(list,"Otomatik kontrol yalnızca eklediğin HTTPS JSON akışları için çalışır. Android'in pil yönetimi nedeniyle saatlik sorgular gecikebilir.");
     }
 
     private void itemCard(LinearLayout list,PriceStore.Tracked item){
@@ -147,7 +147,7 @@ public final class PriceTrackingActivity extends Activity {
         LinearLayout.LayoutParams p=size(-1,-2);p.bottomMargin=dp(12);list.addView(card,p);
     }
 
-    private String origin(String s){return "DEMO_FEED".equals(s)?"TEST veri akışı":"Elle girildi";}
+    private String origin(String s){return "DEMO_FEED".equals(s)?"TEST veri akışı":("EXTERNAL_FEED".equals(s)?"Haricî akış · doğrulanmadı":"Elle girildi");}
 
     private void imageOrPlaceholder(LinearLayout row,PriceStore.Tracked item,int wh){
         if(https(item.imageUrl)){
@@ -175,7 +175,7 @@ public final class PriceTrackingActivity extends Activity {
     }
 
     private void showDetail(LinearLayout list,PriceStore.Tracked item){
-        note(list,"Kaynak durumu: gerçek mağaza fiyatları otomatik çekilmiyor. Test akışından gelen fiyatlar DEMO etiketi taşır.");
+        note(list,"Kaynak durumu: Bağımsız mağaza API bağlantısı yok. DEMO ve haricî akışlar açıkça etiketlenir; haricî fiyatların doğruluğunu ayrıca kontrol et.");
         gap(list,15);
         LinearLayout top=horizontal();list.addView(top);
         imageOrPlaceholder(top,item,74);
@@ -209,16 +209,34 @@ public final class PriceTrackingActivity extends Activity {
                 LinearLayout.LayoutParams rp=size(-1,-2);rp.bottomMargin=dp(7);list.addView(row,rp);
             }
         }
-        headline(list,"Saatlik otomasyon testi");
+        List<PriceStore.Offer> externalOffers = db.offers(item.id);
+        if (!externalOffers.isEmpty()) {
+            headline(list,"Dış akıştan satıcı teklifleri");
+            note(list,"Bu listeyi kullanıcı tanımlı JSON gönderiyor. Fiyat, ürün eşleşmesi ve kullanım izni bağımsız doğrulanmadı. Toplam = fiyat + kargo.");
+            gap(list,10);
+            for (PriceStore.Offer offer : externalOffers) {
+                LinearLayout offerRow=vertical(); pad(offerRow,11,10,11,10); offerRow.setBackground(border(Color.WHITE,12));
+                offerRow.addView(text(offer.merchant + " · " + money(offer.total),14,TEXT,true));
+                gap(offerRow,5);
+                offerRow.addView(text("Ürün " + money(offer.price) + " + kargo " + money(offer.shipping) + " · " + date(offer.observedAt) + (System.currentTimeMillis()-offer.observedAt > 48L*3600000L ? " · GÜNCEL DEĞİL" : ""),11,MUTED,false));
+                if (https(offer.url)) {
+                    gap(offerRow,5);TextView link=text("Mağazada kontrol et ↗",12,PRIMARY,true);
+                    offerRow.addView(link);
+                    link.setOnClickListener(v->startActivity(new Intent(Intent.ACTION_VIEW,Uri.parse(offer.url))));
+                }
+                LinearLayout.LayoutParams op=size(-1,-2);op.bottomMargin=dp(6);list.addView(offerRow,op);
+            }
+        }
+        headline(list,"Saatlik fiyat akışı kontrolü");
         if(item.feedUrl.isEmpty()){
-            note(list,"Henüz DEMO JSON akışı eklenmemiş. Düzenle → Demo veri akışı URL'si bölümünden kendi kontrolündeki HTTPS JSON dosyasını tanımlayabilirsin.");
+            note(list,"Henüz JSON akışı eklenmemiş. Düzenle bölümünden DEMO veya kullanım iznine sahip olduğun haricî JSON bağlantısını tanımlayabilirsin.");
         }else{
-            note(list,"Bu bağlantı yalnızca TEST JSON verisi içindir. Her saat kontrol edilmeye çalışılır; Android kesin zaman garantisi vermez.");
+            note(list,"Bu bağlantı saatte bir kontrol edilmeye çalışılır. DEMO fiyatları gerçek değildir; haricî JSON fiyatları kullanıcı kaynağıdır, bağımsız doğrulanmaz.");
             gap(list,9);
             list.addView(text("Son sorgu: "+(item.lastCheckAt>0?date(item.lastCheckAt):"Henüz sorgulanmadı"),12,MUTED,false));
             gap(list,5);list.addView(text(item.lastCheckResult.isEmpty()?"Durum bilgisi yok":item.lastCheckResult,12,MUTED,false));
             gap(list,10);
-            TextView now=button("Test akışını şimdi sorgula",true);list.addView(now,size(-1,46));
+            TextView now=button("Fiyat akışını şimdi sorgula",true);list.addView(now,size(-1,46));
             now.setOnClickListener(v->{
                 now.setEnabled(false);now.setText("Sorgulanıyor…");
                 new Thread(()->{
@@ -255,9 +273,9 @@ public final class PriceTrackingActivity extends Activity {
         EditText url=field(fields,"Ürün bağlantısı (HTTPS)",item.productUrl,false);
         EditText target=field(fields,"Hedef fiyat (TL)",item.targetPrice>0?String.valueOf(item.targetPrice):"",true);
         EditText image=field(fields,"Ürün fotoğrafı HTTPS adresi (isteğe bağlı)",item.imageUrl,false);
-        EditText feed=field(fields,"DEMO JSON HTTPS adresi (isteğe bağlı)",item.feedUrl,false);
+        EditText feed=field(fields,"JSON fiyat akışı HTTPS adresi (isteğe bağlı)",item.feedUrl,false);
         gap(fields,9);
-        fields.addView(text("Dikkat: DEMO JSON bağlantısı GERÇEK mağaza fiyatı değildir. Örnek biçim için projedeki docs/demo-feed.json dosyasına bak.",12,MUTED,false));
+        fields.addView(text("DEMO akışı test içindir. external akışı yalnızca izinli/denetlenebilir verilerle kullan; uygulama mağaza fiyatını doğrulayamaz. docs/EXTERNAL-FEED.md",12,MUTED,false));
         AlertDialog dialog=new AlertDialog.Builder(this)
             .setTitle(current==null?"Fiyat takibine ürün ekle":"Fiyat takibini düzenle")
             .setView(scroll).setNegativeButton("Vazgeç",null).setPositiveButton("Kaydet",null).create();
@@ -269,7 +287,7 @@ public final class PriceTrackingActivity extends Activity {
             if(!u.isEmpty()&&!https(u)){url.setError("HTTPS adresi olmalı");return;}
             if(!im.isEmpty()&&!https(im)){image.setError("HTTPS adresi olmalı");return;}
             if(!f.isEmpty()&&!https(f)){feed.setError("HTTPS adresi olmalı");return;}
-            if(!f.isEmpty()&&c.isEmpty()){code.setError("Test akışı için ürün kodu gerekli");return;}
+            if(!f.isEmpty()&&c.isEmpty()){code.setError("Fiyat akışı için ürün kodu gerekli");return;}
             double amount;try{amount=priceNumber(target.getText().toString());}catch(Exception e){target.setError("Örnek: 300 veya 299,90");return;}
             if(Math.abs(item.targetPrice-amount)>0.009)item.alertedPrice=0;
             item.name=n;item.productCode=c;item.productUrl=u;item.imageUrl=im;item.feedUrl=f;
