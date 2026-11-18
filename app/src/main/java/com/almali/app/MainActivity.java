@@ -195,6 +195,13 @@ public final class MainActivity extends Activity {
         settings.setOnClickListener(v -> settingsDialog());
         root.addView(top);
 
+        TextView priceTracking = action("📉  Fiyat Takip (Beta)   ›", false);
+        priceTracking.setTextSize(15);
+        LinearLayout.LayoutParams priceTrackingLp = lp(-1, 45);
+        priceTrackingLp.setMargins(dp(18), 0, dp(18), dp(13));
+        root.addView(priceTracking, priceTrackingLp);
+        priceTracking.setOnClickListener(v -> startActivity(new Intent(this, PriceTrackingActivity.class)));
+
         LinearLayout hero = vertical();
         GradientDrawable banner = new GradientDrawable(GradientDrawable.Orientation.TL_BR, new int[]{0xFF6574F3, 0xFF4B52CE});
         banner.setCornerRadius(dp(23));
